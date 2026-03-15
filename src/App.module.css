@@ -1,0 +1,151 @@
+.container {
+  max-width: 600px;
+  margin: 40px auto;
+  font-family: monospace, sans-serif;
+}
+
+
+.editor {
+  position: relative;
+  width: 100%;
+  min-height: 100px;
+  margin-bottom: 20px;
+}
+
+.editor :global(.cm-editor) {
+  min-height: 100px;
+  font-size: 1.1em;
+  border-radius: 6px;
+  border: 1px solid #bbb;
+  background: #fff;
+  outline: none;
+  transition: border 0.2s;
+}
+
+.editor :global(.cm-scroller) {
+  min-height: 100px;
+}
+
+.editor :global(.cm-content) {
+  padding: 10px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.editor :global(.cm-line) {
+  padding: 0px 10px;
+}
+
+.editor :global(.cm-editor.cm-focused) {
+  border: 1.5px solid #6c63ff;
+  background: #f7f7ff;
+}
+
+.preview {
+  background: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  padding: 16px;
+  min-height: 60px;
+  font-size: 1.1em;
+  white-space: pre-wrap;
+}
+
+.highlight,
+.highlight0,
+.highlight1,
+.highlight2,
+.highlight3,
+.highlight4,
+.highlight5,
+.highlight6,
+.highlight7 {
+  font-weight: bold;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+.highlight {
+  background: #ffe066;
+}
+
+.highlight0 {
+  background: #ffe066;
+}
+
+.highlight1 {
+  background: #b2f2bb;
+}
+
+.highlight2 {
+  background: #a5d8ff;
+}
+
+.highlight3 {
+  background: #ffc9c9;
+}
+
+.highlight4 {
+  background: #d0bfff;
+}
+
+.highlight5 {
+  background: #99e9f2;
+}
+
+.highlight6 {
+  background: #ffec99;
+}
+
+.highlight7 {
+  background: #ffd8a8;
+}
+
+.suggestionsPanel {
+  position: absolute;
+  z-index: 20;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  background: #f9f9f9;
+  padding: 5px;
+  margin: 0;
+  max-width: 240px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.suggestionsTitle {
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.suggestionsList {
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+}
+
+.suggestionButton {
+  border: 0px solid #bbb;
+  border-radius: 0px;
+  background: #fff;
+  /* padding: 6px 10px; */
+  cursor: pointer;
+  font-size: 0.95em;
+  text-align: left;
+  font-family: monospace, sans-serif;
+}
+
+.suggestionButton:hover {
+  border-color: #6c63ff;
+  background: #d0d0d6;
+}
+
+.suggestionButtonActive {
+  border-color: #6c63ff;
+  background: #d0d0d6;
+}
+
+.suggestionsEmpty {
+  color: #666;
+  font-size: 0.95em;
+}
