@@ -1,7 +1,13 @@
 .container {
-  max-width: 600px;
+  max-width: 1200px;
   margin: 40px auto;
   font-family: monospace, sans-serif;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 20px;
 }
 
 
@@ -10,6 +16,167 @@
   width: 100%;
   min-height: 100px;
   margin-bottom: 20px;
+  border: 1px solid #aaa;
+  padding: 3px;
+  border-radius: 6px;
+}
+
+.snippetTable {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.snippetTable th,
+.snippetTable td {
+  border-bottom: 1px solid #eee;
+  /* padding: 8px; */
+  vertical-align: middle;
+}
+
+.snippetTable th {
+  text-align: left;
+  background: #f7f7ff;
+}
+
+.snippetActionsHeader {
+  width: 64px;
+}
+
+.snippetTable th:nth-child(3),
+.snippetTable td:nth-child(3) {
+  width: 64px;
+}
+
+.snippetInput {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 0px solid #bbb;
+  border-radius: 4px;
+  font-family: monospace, sans-serif;
+  font-size: 0.8rem;
+  padding: 6px 8px;
+  box-sizing: border-box;
+}
+
+.snippetInput:focus {
+  border-color: #6c63ff;
+  border: 1px solid #6c63ff;
+  outline: none;
+  /* background: #e9e9f1; */
+}
+
+.snippetColorInput {
+  width: 100%;
+  min-width: 90px;
+  height: 32px;
+  border: 0px solid #bbb;
+  border-radius: 4px;
+  font-family: monospace, sans-serif;
+  font-size: 0.8rem;
+  padding: 6px 8px;
+  box-sizing: border-box;
+}
+
+.snippetColorInput:focus {
+  border-color: #6c63ff;
+  outline: none;
+}
+
+.snippetColorRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.snippetColorPickerButton {
+  width: 32px;
+  height: 32px;
+  border: 0px solid #bbb;
+  border-radius: 120px;
+  background: #fff;
+  /* padding: 2px; */
+  cursor: pointer;
+}
+
+.snippetColorPickerButton::-webkit-color-swatch-wrapper {
+  padding: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.snippetColorPickerButton::-webkit-color-swatch {
+  border: 0;
+  border-radius: 20px;
+}
+
+.snippetInputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.snippetActions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.snippetActionButton {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0px solid #bbb;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-weight: bold;
+  font-family: monospace, sans-serif;
+}
+
+.snippetDragHandle {
+  cursor: grab;
+}
+
+.snippetDragHandle:active {
+  cursor: grabbing;
+}
+
+.snippetRowDropTarget td {
+  background: #f1f3ff;
+}
+
+.snippetActionButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.addSnippetButton {
+  margin-top: 10px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  padding: 6px 10px;
+  font-family: monospace, sans-serif;
+}
+
+.scriptEditor :global(.cm-editor) {
+  height: 70vh;
+  min-height: 300px;
+}
+
+.scriptEditor :global(.cm-scroller) {
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
 .editor :global(.cm-editor) {
@@ -148,4 +315,45 @@
 .suggestionsEmpty {
   color: #666;
   font-size: 0.95em;
+}
+
+.commandButton {
+  border-radius: 4px;
+  border-color: #d0d0d6;
+  font-family: roboto, sans-serif;
+  font-weight: bold;
+}
+
+.commandButton:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.commandBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.renderStatus {
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 0.95rem;
+}
+
+.renderStatusRunning {
+  background: #e7f5ff;
+  color: #0b7285;
+}
+
+.renderStatusSuccess {
+  background: #ebfbee;
+  color: #2b8a3e;
+}
+
+.renderStatusError {
+  background: #fff5f5;
+  color: #c92a2a;
 }

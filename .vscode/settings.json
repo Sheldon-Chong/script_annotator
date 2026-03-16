@@ -1,0 +1,26 @@
+{
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "eslint.validate": [
+    // "javascript",
+    // "javascriptreact",
+    // "typescript",
+    // "typescriptreact"
+  ],
+  "workbench.colorCustomizations": {
+    "commandCenter.border": "#e7e7e799",
+    "sash.hoverBorder": "#a6409b",
+    "statusBar.background": "#813279",
+    "statusBar.foreground": "#e7e7e7",
+    "statusBarItem.hoverBackground": "#a6409b",
+    "statusBarItem.remoteBackground": "#813279",
+    "statusBarItem.remoteForeground": "#e7e7e7",
+    "titleBar.activeBackground": "#813279",
+    "titleBar.activeForeground": "#e7e7e7",
+    "titleBar.inactiveBackground": "#81327999",
+    "titleBar.inactiveForeground": "#e7e7e799"
+  },
+  "peacock.remoteColor": "#813279"
+}
