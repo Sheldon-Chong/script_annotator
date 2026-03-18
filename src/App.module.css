@@ -228,6 +228,22 @@
   font-family: monospace, sans-serif;
 }
 
+.suggestionCommandButton {
+  /* margin-top: 10px; */
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  padding: 3px 10px;
+  font-family: monospace, sans-serif;
+  width: 100%;
+}
+
+.suggestionCommandButton:hover {
+  border-color: #6c63ff;
+  /* background: #dddde2; */
+}
+
 .scriptEditor :global(.cm-editor) {
   height: 70vh;
   min-height: 300px;
@@ -399,9 +415,11 @@
 .suggestionButton {
   border: 0px solid #bbb;
   border-radius: 0px;
-  background: #fff;
+  background: #ffffff00;
   /* padding: 6px 10px; */
   cursor: pointer;
+  width: 100%;
+
   font-size: 0.95em;
   text-align: left;
   font-family: monospace, sans-serif;
@@ -451,6 +469,21 @@
 .renderStatusRunning {
   background: #e7f5ff;
   color: #0b7285;
+}
+
+.renderButton {
+  border-radius: 4px;
+  border: 1px solid #afabab;
+  /* border-color: #c7c7c7; */
+  background: #dfdfdf;
+  color: #434347;
+  font-family: roboto, sans-serif;
+  font-weight: bold;
+}
+
+.renderButton:hover {
+  border-color: #6c63ff;
+  background: #d0d0d6;
 }
 
 .renderStatusSuccess {

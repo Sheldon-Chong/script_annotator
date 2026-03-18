@@ -17,7 +17,6 @@ import {
 import { insertNewlineAndIndent } from '@codemirror/commands';
 import SnippetTable, { type SnippetRow } from './components/SnippetTable';
 import styles from './App.module.css';
-// todo: use alt click to trigger popup menu
 
 type RenderResponse = {
   rendered: number;
@@ -207,11 +206,10 @@ newline
 `;
 
 const STARTING_SNIPPETS = `
-character_1
-character_2
-character_3
-character_4
-character_5    
+Sans
+Doey
+Lily
+Prototype
 `;
 
 function normalizeHexColor(value: string): string {
@@ -273,6 +271,7 @@ function App() {
     message: '',
   });
   const [hasRangeSelection, setHasRangeSelection] = useState(false);
+  const [hasMultiCursor, setHasMultiCursor] = useState(false);
   const [isSuggestionMenuOpen, setIsSuggestionMenuOpen] = useState(false);
   const [suggestionPosition, setSuggestionPosition] = useState({ x: 16, y: 16 });
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
@@ -283,6 +282,9 @@ function App() {
   const mainEditorContainerRef = useRef<HTMLDivElement | null>(null);
   const suggestionSearchInputRef = useRef<HTMLInputElement | null>(null);
   const previousRangeSelectionRef = useRef(false);
+  const previousMultiCursorRef = useRef(false);
+  const lastTypedSpacePosRef = useRef<number | null>(null);
+  const shouldDeleteLastTypedSpaceRef = useRef(false);
 
   function focusSuggestionSearchInput() {
     requestAnimationFrame(() => {
@@ -343,50 +345,123 @@ function App() {
     return firstPrefixMatch.slice(query.length);
   }, [suggestionSearch, filteredSuggestionOptions]);
 
-  const isSuggestionMenuVisible = hasRangeSelection && isSuggestionMenuOpen && suggestionOptions.length > 0;
+  const isSuggestionMenuVisible = (hasRangeSelection || hasMultiCursor) && isSuggestionMenuOpen && suggestionOptions.length > 0;
   const isSuggestionMenuActive = isSuggestionMenuVisible;
 
-  const snippetCompletions = useMemo<Completion[]>(() => {
-    return suggestionOptions.map(option => ({
-      label: option,
-      type: 'text',
-      apply: (view: EditorView, _completion, from, to) => {
-        view.dispatch({
-          changes: { from, to, insert: '' },
-          selection: { anchor: from },
-        });
-        insertSnippet(view, option);
-      },
-    }));
-  }, [suggestionOptions]);
+  function applyCompletionSnippet(view: EditorView, snippet: string, from: number, to: number) {
+    const changes: { from: number; to: number; insert: string }[] = [{ from, to, insert: '' }];
+    let nextAnchor = from;
+
+    const spacePos = lastTypedSpacePosRef.current;
+    const shouldDeleteSpace = shouldDeleteLastTypedSpaceRef.current;
+    if (shouldDeleteSpace && spacePos !== null && spacePos >= 0 && spacePos < view.state.doc.length) {
+      const maybeSpace = view.state.doc.sliceString(spacePos, spacePos + 1);
+      if (maybeSpace === ' ') {
+        changes.push({ from: spacePos, to: spacePos + 1, insert: '' });
+        if (spacePos < from) {
+          nextAnchor = Math.max(0, from - 1);
+        }
+      }
+    }
+
+    view.dispatch({
+      changes,
+      selection: { anchor: nextAnchor },
+    });
+    shouldDeleteLastTypedSpaceRef.current = false;
+    lastTypedSpacePosRef.current = null;
+    insertSnippet(view, snippet);
+  }
 
   const snippetCompletionSource = useMemo(() => {
     return (context: CompletionContext) => {
-      const word = context.matchBefore(/[\w-]*/);
+      const word = context.matchBefore(/\S*/);
       const isEmptyWord = !word || (word.from === word.to && !context.explicit);
       if (isEmptyWord) {
         if (!context.explicit) return null;
       }
 
-      const query = word?.text ?? '';
+      const from = word ? word.from : context.pos;
+      const query = context.state.doc.sliceString(from, context.pos);
       const normalizedQuery = query.toLowerCase();
-      const options = snippetCompletions.filter(option => option.label.toLowerCase().startsWith(normalizedQuery));
+      const options: Completion[] = suggestionOptions
+        .filter(option => option.toLowerCase().startsWith(normalizedQuery))
+        .map(option => ({
+          label: option,
+          type: 'text',
+          apply: (view: EditorView, _completion, from, to) => {
+            applyCompletionSnippet(view, option, from, to);
+          },
+        }));
+
+      if (query.length > 0) {
+        options.push({
+          label: query,
+          type: 'text',
+          detail: 'Custom snippet',
+          boost: -99,
+          apply: (view: EditorView, _completion, from, to) => {
+            applyCompletionSnippet(view, query, from, to);
+          },
+        });
+      }
+
       if (!options.length) return null;
 
-      const from = word ? word.from : context.pos;
       return {
         from,
         options,
-        validFor: /[\w-]*/,
+        filter: false,
       };
     };
-  }, [snippetCompletions]);
+  }, [suggestionOptions]);
 
   function insertSnippet(view: EditorView, snippet: string) {
     console.log("inserted snippet: ", snippet);
     if (!snippet) return true;
 
     const { state } = view;
+    const ranges = state.selection.ranges;
+
+    if (ranges.length > 1) {
+      const targetLineNumbers = new Set<number>();
+
+      ranges.forEach((range) => {
+        if (range.empty) {
+          const line = state.doc.lineAt(range.head);
+          if (line.length > 0) {
+            targetLineNumbers.add(line.number);
+          }
+          return;
+        }
+
+        const startLine = state.doc.lineAt(range.from).number;
+        const endLine = state.doc.lineAt(range.to).number;
+        for (let lineNumber = startLine; lineNumber <= endLine; lineNumber += 1) {
+          const line = state.doc.line(lineNumber);
+          if (line.length === 0) continue;
+          targetLineNumbers.add(lineNumber);
+        }
+      });
+
+      const changes = Array.from(targetLineNumbers)
+        .sort((a, b) => a - b)
+        .map((lineNumber) => {
+          const line = state.doc.line(lineNumber);
+          return {
+            from: line.from,
+            to: line.to,
+            insert: applySnippetToLine(line.text, snippet),
+          };
+        });
+
+      if (changes.length > 0) {
+        view.dispatch({ changes });
+      }
+
+      return true;
+    }
+
     const selection = state.selection.main;
 
     if (selection.empty) {
@@ -689,7 +764,7 @@ function App() {
     setSnippetDropTargetIndex(null);
   }
 
-  async function handleRenderClick() {
+  async function renderScript(script: string) {
     setIsRendering(true);
     setRenderStatus({
       tone: 'running',
@@ -697,7 +772,7 @@ function App() {
     });
 
     try {
-      const result = await renderRequest(mainValue);
+      const result = await renderRequest(script);
       const message = `Render complete. Generated ${result.rendered} file${result.rendered === 1 ? '' : 's'}.`;
       setRenderStatus({
         tone: 'success',
@@ -714,6 +789,42 @@ function App() {
     } finally {
       setIsRendering(false);
     }
+  }
+
+  function getCurrentSelectionScript(view: EditorView): string {
+    const nonEmptyRanges = view.state.selection.ranges.filter(range => !range.empty);
+    if (nonEmptyRanges.length === 0) {
+      return '';
+    }
+
+    return nonEmptyRanges
+      .map(range => view.state.doc.sliceString(range.from, range.to))
+      .join('\n');
+  }
+
+  async function handleRenderClick() {
+    await renderScript(mainValue);
+  }
+
+  async function handleRenderSelectionClick() {
+    const view = mainEditorRef.current;
+    if (!view) return;
+
+    const selectionScript = getCurrentSelectionScript(view).trim();
+    if (!selectionScript) {
+      setRenderStatus({
+        tone: 'error',
+        message: 'Select text before rendering selection.',
+      });
+      return;
+    }
+
+    const shouldRender = window.confirm('Render current selection?');
+    if (!shouldRender) {
+      return;
+    }
+
+    await renderScript(selectionScript);
   }
 
   function openSuggestionsMenu(view: EditorView) {
@@ -837,6 +948,15 @@ function App() {
       Prec.highest(keymap.of(suggestionNavigationBindings)),
       Prec.highest(keymap.of([
         {
+          key: 'Space',
+          run: (view: EditorView) => {
+            lastTypedSpacePosRef.current = view.state.selection.main.head;
+            shouldDeleteLastTypedSpaceRef.current = false;
+            return false;
+          },
+          preventDefault: false,
+        },
+        {
           key: 'Ctrl-Space',
           run: (view: EditorView) => {
             startCompletion(view);
@@ -926,18 +1046,33 @@ function App() {
             onCreateEditor={(view: EditorView) => {
               mainEditorRef.current = view;
               const rangeSelected = !view.state.selection.main.empty;
+              const multiCursor = view.state.selection.ranges.length > 1;
               setHasRangeSelection(rangeSelected);
-              setIsSuggestionMenuOpen(rangeSelected);
+              setHasMultiCursor(multiCursor);
+              setIsSuggestionMenuOpen(rangeSelected || multiCursor);
               previousRangeSelectionRef.current = rangeSelected;
+              previousMultiCursorRef.current = multiCursor;
               updateSuggestionPosition(view);
             }}
             onUpdate={(update: ViewUpdate) => {
               const rangeSelected = !update.state.selection.main.empty;
+              const multiCursor = update.state.selection.ranges.length > 1;
               setHasRangeSelection(prev => (prev === rangeSelected ? prev : rangeSelected));
+              setHasMultiCursor(prev => (prev === multiCursor ? prev : multiCursor));
 
-              if (!rangeSelected) {
+              const completionIsActive = completionStatus(update.state) === 'active';
+              if (lastTypedSpacePosRef.current !== null && completionIsActive) {
+                shouldDeleteLastTypedSpaceRef.current = true;
+              }
+
+              if (update.selectionSet && !update.docChanged) {
+                shouldDeleteLastTypedSpaceRef.current = false;
+                lastTypedSpacePosRef.current = null;
+              }
+
+              if (!rangeSelected && !multiCursor) {
                 setIsSuggestionMenuOpen(false);
-              } else if (!previousRangeSelectionRef.current) {
+              } else if (!previousRangeSelectionRef.current && !previousMultiCursorRef.current) {
                 setIsSuggestionMenuOpen(true);
                 updateSuggestionPosition(update.view);
                 focusSuggestionSearchInput();
@@ -948,6 +1083,7 @@ function App() {
               }
 
               previousRangeSelectionRef.current = rangeSelected;
+              previousMultiCursorRef.current = multiCursor;
             }}
             placeholder="Type here..."
             basicSetup={{
@@ -991,6 +1127,26 @@ function App() {
                   ))}
                 </div>
               )}
+              <hr style={{ color: '#eee' }}></hr>
+              <div
+                style={{
+                  padding: '3px 0px',
+                  gap: "2px",
+                  flexDirection: "column",
+                  display: "flex",
+                }}
+              >
+                <button
+                  type="button"
+                  className={styles.suggestionCommandButton}
+                  onClick={handleRenderSelectionClick}
+                >
+                  render
+                </button>
+                <button type="button" className={styles.suggestionCommandButton}>
+                  preview
+                </button>
+              </div>
             </div>
           )}
 
