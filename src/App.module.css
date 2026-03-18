@@ -95,24 +95,83 @@
 }
 
 .snippetColorPickerButton {
-  width: 32px;
-  height: 32px;
+  inline-size: 22px;
+  block-size: 22px;
+  flex: 0 0 22px;
+  aspect-ratio: 1 / 1;
+  box-sizing: border-box;
   border: 0px solid #bbb;
-  border-radius: 120px;
-  background: #fff;
-  /* padding: 2px; */
+  border-radius: 50%;
+  padding: 0;
   cursor: pointer;
 }
 
-.snippetColorPickerButton::-webkit-color-swatch-wrapper {
-  padding: 0;
-  width: 20px;
-  height: 20px;
+.snippetColorPickerButton:hover {
+  border-color: #6c63ff;
 }
 
-.snippetColorPickerButton::-webkit-color-swatch {
-  border: 0;
-  border-radius: 20px;
+.colorPickerOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.colorPickerDialog {
+  background: #fff;
+  border: 1px solid #bbb;
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 260px;
+}
+
+.colorPickerTitle {
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.colorPickerMapWrap {
+  margin-bottom: 10px;
+}
+
+.colorPickerMapWrap :global(.react-colorful) {
+  width: 100%;
+  height: 170px;
+}
+
+.colorPickerRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.colorPickerPreview {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #bbb;
+  flex: 0 0 28px;
+}
+
+.colorPickerHexInput {
+  width: 100%;
+  height: 32px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  font-family: monospace, sans-serif;
+  font-size: 0.9rem;
+  padding: 6px 8px;
+  box-sizing: border-box;
+}
+
+.colorPickerActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .snippetInputRow {
@@ -285,10 +344,56 @@
   margin-bottom: 8px;
 }
 
+.suggestionsSearchInput {
+  width: 100%;
+  height: 30px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  padding: 4px 8px;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  font-size: 0.9em;
+  font-family: monospace, sans-serif;
+  position: relative;
+  z-index: 2;
+  background: transparent;
+}
+
+.customInputWrapper {
+  position: relative;
+}
+
+.suggestionsGhostSuffix {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  opacity: 0.45;
+  font-size: 0.9em;
+  font-family: monospace, sans-serif;
+  white-space: pre;
+  z-index: 1;
+}
+
 .suggestionsList {
   display: flex;
   flex-direction: column;
-  gap: 0px;
+  gap: 2px;
+}
+
+.suggestionRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.suggestionColorDot {
+  inline-size: 14px;
+  block-size: 14px;
+  flex: 0 0 14px;
+  border: 1px solid #bbb;
+  cursor: default;
+  pointer-events: none;
 }
 
 .suggestionButton {
@@ -356,4 +461,22 @@
 .renderStatusError {
   background: #fff5f5;
   color: #c92a2a;
+}
+
+.autocompleteColorDot {
+  inline-size: 10px;
+  block-size: 10px;
+  border-radius: 50%;
+  border: 1px solid #bbb;
+  margin-right: 6px;
+  align-self: center;
+}
+
+.editor :global(.cm-tooltip-autocomplete) {
+  border: 1px solid #ddd;
+}
+
+.editor :global(.cm-tooltip-autocomplete ul li) {
+  display: flex;
+  align-items: center;
 }

@@ -5,7 +5,19 @@ import { RangeSetBuilder, Prec } from '@codemirror/state';
 import { keymap } from '@codemirror/view';
 import { lineNumbers } from '@codemirror/view';
 import { selectAll } from '@codemirror/commands';
+import { HexColorPicker } from 'react-colorful';
+import {
+  autocompletion,
+  acceptCompletion,
+  completionStatus,
+  startCompletion,
+  type Completion,
+  type CompletionContext,
+} from '@codemirror/autocomplete';
+import { insertNewlineAndIndent } from '@codemirror/commands';
+import SnippetTable, { type SnippetRow } from './components/SnippetTable';
 import styles from './App.module.css';
+// todo: use alt click to trigger popup menu
 
 type RenderResponse = {
   rendered: number;
@@ -15,11 +27,6 @@ type RenderResponse = {
 type RenderStatus = {
   tone: 'idle' | 'running' | 'success' | 'error';
   message: string;
-};
-
-type SnippetRow = {
-  text: string;
-  color: string;
 };
 
 const DEFAULT_SNIPPET_COLOR = '#ffe066';
@@ -37,6 +44,57 @@ class CharacterProfile {
   constructor(public name: string, public description: string,) {
   }
 }
+
+// Extend the standard Input attributes
+interface CustomInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  children?: React.ReactNode;
+  onEmptyBackspace?: () => void; // Optional custom callback
+  ghostSuffix?: string;
+}
+
+const CustomInput = React.forwardRef<HTMLInputElement, CustomInputProps>(function CustomInput(
+  {
+    children,
+    className,
+    onEmptyBackspace,
+    ghostSuffix,
+    onKeyDown,
+    ...rest
+  },
+  ref,
+) {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Backspace' && event.currentTarget.value === '') {
+      event.preventDefault();
+      onEmptyBackspace?.();
+    }
+
+    onKeyDown?.(event);
+  };
+
+  return (
+    <div className={styles.customInputWrapper}>
+      {children}
+      {ghostSuffix ? (
+        <span
+          className={styles.suggestionsGhostSuffix}
+          style={{
+            left: `calc(8px + ${typeof rest.value === 'string' ? rest.value.length : 0}ch)`,
+          }}
+          aria-hidden="true"
+        >
+          {ghostSuffix}
+        </span>
+      ) : null}
+      <input
+        ref={ref}
+        {...rest}
+        className={`default-input-style ${className || ""}`}
+        onKeyDown={handleKeyDown}
+      />
+    </div>
+  );
+});
 
 async function renderRequest(script: string): Promise<RenderResponse> {
   const response = await fetch("http://localhost:8000/textbox/render", {
@@ -199,7 +257,12 @@ function parseSnippetRows(value: string): SnippetRow[] {
     });
 }
 
+
+
+
 function App() {
+
+
   const [mainValue, setMainValue] = useState(STARTING_SCRIPT);
   const [snippetRows, setSnippetRows] = useState<SnippetRow[]>(() => parseSnippetRows(STARTING_SNIPPETS));
   const [draggingSnippetRowIndex, setDraggingSnippetRowIndex] = useState<number | null>(null);
@@ -212,10 +275,22 @@ function App() {
   const [hasRangeSelection, setHasRangeSelection] = useState(false);
   const [isSuggestionMenuOpen, setIsSuggestionMenuOpen] = useState(false);
   const [suggestionPosition, setSuggestionPosition] = useState({ x: 16, y: 16 });
-  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+  const [suggestionSearch, setSuggestionSearch] = useState('');
+  const [activeColorPickerIndex, setActiveColorPickerIndex] = useState<number | null>(null);
+  const [colorPickerDraft, setColorPickerDraft] = useState(DEFAULT_SNIPPET_COLOR);
   const mainEditorRef = useRef<EditorView | null>(null);
   const mainEditorContainerRef = useRef<HTMLDivElement | null>(null);
+  const suggestionSearchInputRef = useRef<HTMLInputElement | null>(null);
   const previousRangeSelectionRef = useRef(false);
+
+  function focusSuggestionSearchInput() {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        suggestionSearchInputRef.current?.focus();
+      }, 0);
+    });
+  }
 
   const suggestionOptions = useMemo(() => {
     const uniqueOptions = new Set<string>();
@@ -247,9 +322,68 @@ function App() {
     return createHighlightBeforeDoubleColon(snippetHighlightColorByName, DEFAULT_SNIPPET_COLOR);
   }, [snippetHighlightColorByName]);
 
-  const isSuggestionMenuActive = hasRangeSelection && isSuggestionMenuOpen && suggestionOptions.length > 0;
+  const filteredSuggestionOptions = useMemo(() => {
+    const query = suggestionSearch.trim().toLowerCase();
+    if (!query) {
+      return suggestionOptions;
+    }
+    return suggestionOptions.filter(option => option.toLowerCase().includes(query));
+  }, [suggestionOptions, suggestionSearch]);
+
+  const suggestionGhostSuffix = useMemo(() => {
+    console.log("calculating ghost suffix for query: ", suggestionSearch);
+    const query = suggestionSearch;
+    if (!query) return '';
+    const loweredQuery = query.toLowerCase();
+    const firstPrefixMatch = filteredSuggestionOptions.find(option => {
+      const loweredOption = option.toLowerCase();
+      return loweredOption.startsWith(loweredQuery) && option.length > query.length;
+    });
+    if (!firstPrefixMatch) return '';
+    return firstPrefixMatch.slice(query.length);
+  }, [suggestionSearch, filteredSuggestionOptions]);
+
+  const isSuggestionMenuVisible = hasRangeSelection && isSuggestionMenuOpen && suggestionOptions.length > 0;
+  const isSuggestionMenuActive = isSuggestionMenuVisible;
+
+  const snippetCompletions = useMemo<Completion[]>(() => {
+    return suggestionOptions.map(option => ({
+      label: option,
+      type: 'text',
+      apply: (view: EditorView, _completion, from, to) => {
+        view.dispatch({
+          changes: { from, to, insert: '' },
+          selection: { anchor: from },
+        });
+        insertSnippet(view, option);
+      },
+    }));
+  }, [suggestionOptions]);
+
+  const snippetCompletionSource = useMemo(() => {
+    return (context: CompletionContext) => {
+      const word = context.matchBefore(/[\w-]*/);
+      const isEmptyWord = !word || (word.from === word.to && !context.explicit);
+      if (isEmptyWord) {
+        if (!context.explicit) return null;
+      }
+
+      const query = word?.text ?? '';
+      const normalizedQuery = query.toLowerCase();
+      const options = snippetCompletions.filter(option => option.label.toLowerCase().startsWith(normalizedQuery));
+      if (!options.length) return null;
+
+      const from = word ? word.from : context.pos;
+      return {
+        from,
+        options,
+        validFor: /[\w-]*/,
+      };
+    };
+  }, [snippetCompletions]);
 
   function insertSnippet(view: EditorView, snippet: string) {
+    console.log("inserted snippet: ", snippet);
     if (!snippet) return true;
 
     const { state } = view;
@@ -262,10 +396,11 @@ function App() {
       const cursorOffset = doubleColonIdx !== -1
         ? snippet.length + 2
         : (line.text.length > 0 ? snippet.length + 3 : snippet.length + 2);
+      const cursorAnchor = Math.min(line.from + cursorOffset, line.from + newLine.length);
 
       view.dispatch({
         changes: { from: line.from, to: line.to, insert: newLine },
-        selection: { anchor: line.from + cursorOffset },
+        selection: { anchor: cursorAnchor },
       });
       return true;
     }
@@ -281,7 +416,7 @@ function App() {
     }
 
     if (changes.length > 0) {
-      view.dispatch({ changes, selection: state.selection });
+      view.dispatch({ changes });
     }
 
     return true;
@@ -322,13 +457,89 @@ function App() {
   }
 
   function applySuggestionByIndex(view: EditorView, index: number) {
-    if (!suggestionOptions.length) return true;
-    const normalizedIndex = ((index % suggestionOptions.length) + suggestionOptions.length) % suggestionOptions.length;
-    insertSnippet(view, suggestionOptions[normalizedIndex]);
+    if (!filteredSuggestionOptions.length || index < 0) return true;
+    const normalizedIndex = ((index % filteredSuggestionOptions.length) + filteredSuggestionOptions.length) % filteredSuggestionOptions.length;
+    insertSnippet(view, filteredSuggestionOptions[normalizedIndex]);
     setIsSuggestionMenuOpen(false);
-    setActiveSuggestionIndex(normalizedIndex);
+    setSuggestionSearch('');
+    setActiveSuggestionIndex(-1);
     view.focus();
     return true;
+  }
+
+  function deleteSelectedRangeFromEditor() {
+    const view = mainEditorRef.current;
+    if (!view) return;
+
+    const selection = view.state.selection.main;
+    if (selection.empty) return;
+
+    const cursor = selection.from;
+    view.dispatch({
+      changes: { from: selection.from, to: selection.to, insert: '' },
+      selection: { anchor: cursor },
+    });
+    view.focus();
+  }
+
+  function handleSuggestionSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+      console.log("arrow key ");
+      if (event.shiftKey) {
+        console.log("shift + arrow key pressed, ignoring for suggestion navigation");
+        return;
+      }
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setIsSuggestionMenuOpen(false);
+      setSuggestionSearch('');
+      mainEditorRef.current?.focus();
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (!filteredSuggestionOptions.length) return;
+      setActiveSuggestionIndex(prev => {
+        if (prev < 0) return 0;
+        return Math.min(prev + 1, filteredSuggestionOptions.length - 1);
+      });
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveSuggestionIndex(prev => {
+        if (prev <= 0) {
+          suggestionSearchInputRef.current?.focus();
+          return -1;
+        }
+        return prev - 1;
+      });
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (!filteredSuggestionOptions.length) return;
+      const view = mainEditorRef.current;
+      if (!view) return;
+      const indexToApply = activeSuggestionIndex < 0 ? 0 : activeSuggestionIndex;
+      applySuggestionByIndex(view, indexToApply);
+      return;
+    }
+
+    const shouldResetActiveSuggestionIndex =
+      event.key.length === 1 ||
+      event.key === 'Backspace' ||
+      event.key === 'Delete';
+
+    if (shouldResetActiveSuggestionIndex) {
+      setActiveSuggestionIndex(0);
+    }
+
   }
 
   function updateSuggestionPosition(view: EditorView) {
@@ -348,19 +559,54 @@ function App() {
   }
 
   useEffect(() => {
-    if (!suggestionOptions.length) {
-      setActiveSuggestionIndex(0);
+    if (!filteredSuggestionOptions.length) {
+      setActiveSuggestionIndex(-1);
       return;
     }
-    setActiveSuggestionIndex(prev => Math.min(prev, suggestionOptions.length - 1));
-  }, [suggestionOptions]);
+    setActiveSuggestionIndex(prev => {
+      if (prev < 0) return -1;
+      return Math.min(prev, filteredSuggestionOptions.length - 1);
+    });
+  }, [filteredSuggestionOptions]);
+
+  useEffect(() => {
+    if (isSuggestionMenuVisible) {
+      focusSuggestionSearchInput();
+    }
+  }, [isSuggestionMenuVisible]);
 
   useEffect(() => {
     if (!hasRangeSelection) {
+      const isSearchFocused = suggestionSearchInputRef.current === document.activeElement;
+      if (isSearchFocused) return;
       setIsSuggestionMenuOpen(false);
-      setActiveSuggestionIndex(0);
+      setActiveSuggestionIndex(-1);
+      setSuggestionSearch('');
     }
   }, [hasRangeSelection]);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!isSuggestionMenuOpen) return;
+
+      const container = mainEditorContainerRef.current;
+      if (!container) return;
+
+      const targetNode = event.target as Node | null;
+      if (targetNode && container.contains(targetNode)) {
+        return;
+      }
+
+      setIsSuggestionMenuOpen(false);
+      setSuggestionSearch('');
+      setActiveSuggestionIndex(-1);
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [isSuggestionMenuOpen]);
 
   function handleSuggestionMouseEnter(index: number) {
     setActiveSuggestionIndex(index);
@@ -378,25 +624,28 @@ function App() {
     setSnippetRows(prev => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, color: value } : row)));
   }
 
+  function openColorPicker(index: number) {
+    const current = snippetRows[index]?.color ?? DEFAULT_SNIPPET_COLOR;
+    setColorPickerDraft(normalizeHexColor(current));
+    setActiveColorPickerIndex(index);
+  }
+
+  function closeColorPicker() {
+    setActiveColorPickerIndex(null);
+  }
+
+  function applyColorPicker() {
+    if (activeColorPickerIndex === null) return;
+    updateSnippetColor(activeColorPickerIndex, normalizeHexColor(colorPickerDraft));
+    closeColorPicker();
+  }
+
   function deleteSnippetRow(index: number) {
     setSnippetRows(prev => {
       if (prev.length <= 1) {
         return [{ text: '', color: DEFAULT_SNIPPET_COLOR }];
       }
       return prev.filter((_, rowIndex) => rowIndex !== index);
-    });
-  }
-
-  function moveSnippetRow(index: number, direction: -1 | 1) {
-    setSnippetRows(prev => {
-      const targetIndex = index + direction;
-      if (targetIndex < 0 || targetIndex >= prev.length) {
-        return prev;
-      }
-      const next = [...prev];
-      const [item] = next.splice(index, 1);
-      next.splice(targetIndex, 0, item);
-      return next;
     });
   }
 
@@ -468,25 +717,63 @@ function App() {
   }
 
   function openSuggestionsMenu(view: EditorView) {
-    if (!hasRangeSelection || suggestionOptions.length === 0) return false;
+    const hasSelection = !view.state.selection.main.empty;
+    if (!hasSelection || suggestionOptions.length === 0) return false;
+    setSuggestionSearch('');
+    setActiveSuggestionIndex(-1);
     setIsSuggestionMenuOpen(true);
     updateSuggestionPosition(view);
+    console.log('opened suggestions menu');
+    focusSuggestionSearchInput();
+
     return true;
   }
 
   const mainExtensions = useMemo(() => {
-    const snippetBindings = Array.from({ length: 10 }, (_, idx) => ({
-      key: `Alt-${idx === 9 ? 0 : idx + 1}`,
-      run: (view: EditorView) => insertSnippet(view, snippetRows[idx]?.text.trim() || ''),
-      preventDefault: true,
-    }));
+    const snippetBindings = Array.from({ length: 10 }, (_, idx) => {
+      const digit = idx === 9 ? 0 : idx + 1;
+      const run = (view: EditorView) => insertSnippet(view, snippetRows[idx]?.text.trim() || '');
+      return [
+        {
+          key: `Alt-${digit}`,
+          run,
+          preventDefault: true,
+        },
+        {
+          key: `Shift-Alt-${digit}`,
+          run,
+          preventDefault: true,
+        },
+        {
+          key: `Ctrl-Alt-${digit}`,
+          run,
+          preventDefault: true,
+        },
+      ];
+    }).flat();
 
     const suggestionNavigationBindings = [
       {
+        key: 'Shift-ArrowDown',
+        run: () => false,
+        preventDefault: false,
+      },
+      {
+        key: 'Shift-ArrowUp',
+        run: () => false,
+        preventDefault: false,
+      },
+      {
         key: 'ArrowDown',
         run: () => {
-          if (!isSuggestionMenuActive) return false;
-          setActiveSuggestionIndex(prev => (prev + 1) % suggestionOptions.length);
+          if (!isSuggestionMenuActive || !filteredSuggestionOptions.length) return false;
+          setActiveSuggestionIndex(prev => {
+            if (prev >= filteredSuggestionOptions.length - 1) {
+              suggestionSearchInputRef.current?.focus();
+              return -1;
+            }
+            return prev + 1;
+          });
           return true;
         },
         preventDefault: true,
@@ -494,54 +781,96 @@ function App() {
       {
         key: 'ArrowUp',
         run: () => {
-          if (!isSuggestionMenuActive) return false;
-          setActiveSuggestionIndex(prev => (prev - 1 + suggestionOptions.length) % suggestionOptions.length);
+          if (!isSuggestionMenuActive || !filteredSuggestionOptions.length) return false;
+          setActiveSuggestionIndex(prev => {
+            if (prev <= -1) {
+              return filteredSuggestionOptions.length - 1;
+            }
+            return prev - 1;
+          });
           return true;
-        },
-        preventDefault: true,
-      },
-      {
-        key: 'Enter',
-        run: (view: EditorView) => {
-          if (!isSuggestionMenuActive) return false;
-          return applySuggestionByIndex(view, activeSuggestionIndex);
         },
         preventDefault: true,
       },
     ];
 
+    const autocompleteExtension = autocompletion({
+      override: [snippetCompletionSource],
+      activateOnTyping: true,
+      defaultKeymap: true,
+      icons: false,
+      addToOptions: [
+        {
+          position: 20,
+          render: (completion) => {
+            const dot = document.createElement('span');
+            dot.className = styles.autocompleteColorDot;
+            dot.style.backgroundColor = normalizeHexColor(
+              snippetHighlightColorByName.get(completion.label) ?? DEFAULT_SNIPPET_COLOR,
+            );
+            return dot;
+          },
+        },
+      ],
+    });
+
     return [
       lineNumbers(),
       EditorView.lineWrapping,
       highlightBeforeDoubleColon,
+      autocompleteExtension,
+      EditorView.domEventHandlers({
+
+        click: (event, view) => {
+          console.log("click");
+          if (!event.altKey) return false;
+          event.preventDefault();
+          return openSuggestionsMenu(view);
+        },
+        mouseup: (_event, view) => {
+          if (!isSuggestionMenuOpen) return false;
+          if (view.state.selection.main.empty) return false;
+          focusSuggestionSearchInput();
+          return false;
+        },
+      }),
       Prec.highest(keymap.of(suggestionNavigationBindings)),
       Prec.highest(keymap.of([
         {
           key: 'Ctrl-Space',
           run: (view: EditorView) => {
-            console.log('Ctrl-Space pressed');
-            return openSuggestionsMenu(view);
+            startCompletion(view);
+            return true;
           },
           preventDefault: true,
         },
         {
           key: 'Mod-Space',
-          run: (view: EditorView) => openSuggestionsMenu(view),
+          run: (view: EditorView) => {
+            startCompletion(view);
+            return true;
+          },
+          preventDefault: true,
+        },
+        {
+          key: 'Tab',
+          run: (view: EditorView) => {
+            if (completionStatus(view.state) !== 'active') return false;
+            return acceptCompletion(view);
+          },
+          preventDefault: false,
+        },
+        {
+          key: 'Enter',
+          run: (view: EditorView) => {
+            if (completionStatus(view.state) !== 'active') return false;
+            return insertNewlineAndIndent(view);
+          },
           preventDefault: true,
         },
       ])),
       keymap.of([
         ...snippetBindings,
-        {
-          key: 'Ctrl-Space',
-          run: (view: EditorView) => openSuggestionsMenu(view),
-          preventDefault: true,
-        },
-        {
-          key: 'Mod-Space',
-          run: (view: EditorView) => openSuggestionsMenu(view),
-          preventDefault: true,
-        },
         {
           key: 'Mod-f',
           run: (view: EditorView) => selectAll(view),
@@ -554,92 +883,37 @@ function App() {
         },
       ]),
     ];
-  }, [snippetRows, isSuggestionMenuActive, suggestionOptions, activeSuggestionIndex, hasRangeSelection]);
+  }, [
+    snippetRows,
+    isSuggestionMenuActive,
+    filteredSuggestionOptions,
+    activeSuggestionIndex,
+    hasRangeSelection,
+    suggestionOptions,
+    highlightBeforeDoubleColon,
+    snippetCompletionSource,
+    snippetHighlightColorByName,
+  ]);
 
   return (
     <div className={styles.container}>
       <h2>Script Annotator</h2>
       <div className={styles.columns}>
         <div className={styles.editor}>
-          <table className={styles.snippetTable}>
-            <thead>
-              <tr>
-                <th>Snippet</th>
-                <th>Color</th>
-                <th className={styles.snippetActionsHeader}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {snippetRows.map((row, index) => (
-                <tr
-                  key={`snippet-row-${index}`}
-                  className={snippetDropTargetIndex === index ? styles.snippetRowDropTarget : ''}
-                  onDragEnter={() => handleSnippetDragEnter(index)}
-                  onDragOver={handleSnippetDragOver}
-                  onDrop={() => handleSnippetDrop(index)}
-                >
-                  <td>
-                    <div className={styles.snippetInputRow}>
-                      <button
-                        type="button"
-                        className={`${styles.snippetActionButton} ${styles.snippetDragHandle}`}
-                        draggable
-                        onDragStart={() => handleSnippetDragStart(index)}
-                        onDragEnd={handleSnippetDragEnd}
-                        title="Drag to reorder"
-                      >
-                        ≣
-                      </button>
-                      <input
-                        className={styles.snippetInput}
-                        value={row.text}
-                        onChange={event => updateSnippetText(index, event.target.value)}
-                        placeholder="Enter snippet"
-                      />
-                    </div>
-                  </td>
-                  <td>
-                    <div className={styles.snippetColorRow}>
-                      <input
-                        className={styles.snippetColorInput}
-                        value={row.color}
-                        onChange={event => updateSnippetColor(index, event.target.value)}
-                        placeholder="#ffe066"
-                        style={{
-                          backgroundColor: normalizeHexColor(row.color),
-                          color: getReadableTextColor(row.color),
-                        }}
-                      />
-                      <input
-                        type="color"
-                        className={styles.snippetColorPickerButton}
-                        value={normalizeHexColor(row.color)}
-                        onChange={event => updateSnippetColor(index, event.target.value)}
-                        title="Pick color"
-                        aria-label="Pick snippet color"
-                      />
-                    </div>
-                  </td>
-                  <td className={styles.snippetActions}>
-                    <button
-                      type="button"
-                      className={styles.snippetActionButton}
-                      onClick={() => deleteSnippetRow(index)}
-                    >
-                      𐄂
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <button
-            type="button"
-            className={styles.addSnippetButton}
-            onClick={addSnippetRow}
-          >
-            Add row
-          </button>
+          <SnippetTable
+            snippetRows={snippetRows}
+            snippetDropTargetIndex={snippetDropTargetIndex}
+            onSnippetDragEnter={handleSnippetDragEnter}
+            onSnippetDragOver={handleSnippetDragOver}
+            onSnippetDrop={handleSnippetDrop}
+            onSnippetDragStart={handleSnippetDragStart}
+            onSnippetDragEnd={handleSnippetDragEnd}
+            onSnippetTextChange={updateSnippetText}
+            onOpenColorPicker={openColorPicker}
+            onDeleteSnippetRow={deleteSnippetRow}
+            onAddSnippetRow={addSnippetRow}
+            normalizeHexColor={normalizeHexColor}
+          />
         </div>
 
         <div
@@ -666,6 +940,7 @@ function App() {
               } else if (!previousRangeSelectionRef.current) {
                 setIsSuggestionMenuOpen(true);
                 updateSuggestionPosition(update.view);
+                focusSuggestionSearchInput();
               }
 
               if (isSuggestionMenuOpen && update.selectionSet) {
@@ -683,32 +958,42 @@ function App() {
             }}
             extensions={mainExtensions}
           />
-          {isSuggestionMenuActive && (
+          {isSuggestionMenuVisible && (
             <div
               className={styles.suggestionsPanel}
               style={{ left: `${suggestionPosition.x}px`, top: `${suggestionPosition.y}px` }}
             >
-              <div className={styles.suggestionsTitle}></div>
-              {suggestionOptions.length === 0 ? (
+              {filteredSuggestionOptions.length === 0 ? (
                 <div className={styles.suggestionsEmpty}>Add suggestion lines in the snippets editor.</div>
               ) : (
                 <div className={styles.suggestionsList}>
-                  {suggestionOptions.map((option, index) => (
-                    <button
-                      key={option}
-                      type="button"
-                      className={`${styles.suggestionButton} ${index === activeSuggestionIndex ? styles.suggestionButtonActive : ''}`}
-                      onMouseDown={event => event.preventDefault()}
-                      onMouseEnter={() => handleSuggestionMouseEnter(index)}
-                      onClick={() => applySuggestion(option)}
-                    >
-                      {option}
-                    </button>
+                  {filteredSuggestionOptions.map((option, index) => (
+                    <div key={option} className={styles.suggestionRow}>
+                      <button
+                        type="button"
+                        className={`${styles.snippetColorPickerButton} ${styles.suggestionColorDot}`}
+                        style={{
+                          backgroundColor: normalizeHexColor(snippetHighlightColorByName.get(option) ?? DEFAULT_SNIPPET_COLOR),
+                        }}
+                        aria-label={`Color for ${option}`}
+                        tabIndex={-1}
+                      />
+                      <button
+                        type="button"
+                        className={`${styles.suggestionButton} ${index === activeSuggestionIndex ? styles.suggestionButtonActive : ''}`}
+                        onMouseDown={event => event.preventDefault()}
+                        onMouseEnter={() => handleSuggestionMouseEnter(index)}
+                        onClick={() => applySuggestion(option)}
+                      >
+                        {option}
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
             </div>
           )}
+
         </div>
       </div>
 
@@ -729,7 +1014,36 @@ function App() {
           disabled={isRendering}
         >{isRendering ? 'Rendering...' : 'Render script'}</button>
       </div>
-    </div>
+
+      {
+        activeColorPickerIndex !== null && (
+          <div className={styles.colorPickerOverlay} onClick={closeColorPicker}>
+            <div className={styles.colorPickerDialog} onClick={event => event.stopPropagation()}>
+              <div className={styles.colorPickerTitle}>Pick highlight color</div>
+              <div className={styles.colorPickerMapWrap}>
+                <HexColorPicker color={normalizeHexColor(colorPickerDraft)} onChange={setColorPickerDraft} />
+              </div>
+              <div className={styles.colorPickerRow}>
+                <div
+                  className={styles.colorPickerPreview}
+                  style={{ backgroundColor: normalizeHexColor(colorPickerDraft) }}
+                />
+                <input
+                  className={styles.colorPickerHexInput}
+                  value={colorPickerDraft}
+                  onChange={event => setColorPickerDraft(event.target.value)}
+                  placeholder="#ffe066"
+                />
+              </div>
+              <div className={styles.colorPickerActions}>
+                <button type="button" className={styles.snippetActionButton} onClick={closeColorPicker}>Cancel</button>
+                <button type="button" className={styles.snippetActionButton} onClick={applyColorPicker}>Apply</button>
+              </div>
+            </div>
+          </div>
+        )
+      }
+    </div >
   );
 }
 
