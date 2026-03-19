@@ -12,9 +12,6 @@
       "error",
       "consistent"
     ],
-    "function-paren-newline": [
-      "error",
-      "multiline-arguments"
-    ]
+    "function-paren-newline": "off"
   }
 }

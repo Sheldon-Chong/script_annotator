@@ -27,8 +27,16 @@
   border-collapse: collapse;
   border: 1px solid #bbb;
   border-radius: 6px;
-  overflow: hidden;
+  overflow: visible;
   background: #fff;
+}
+
+.snippetTextTransformSelect {
+  height: 32px;
+  border: 0px solid #bbb;
+  border-radius: 4px;
+  background: #fff;
+  font-family: monospace, sans-serif;
 }
 
 .snippetTable th,
@@ -50,6 +58,11 @@
 .snippetTable th:nth-child(3),
 .snippetTable td:nth-child(3) {
   width: 64px;
+}
+
+.snippetTable th:nth-child(1),
+.snippetTable td:nth-child(1) {
+  width: 150px;
 }
 
 .snippetInput {
@@ -238,6 +251,8 @@
   font-family: monospace, sans-serif;
   width: 100%;
 }
+
+
 
 .suggestionCommandButton:hover {
   border-color: #6c63ff;
