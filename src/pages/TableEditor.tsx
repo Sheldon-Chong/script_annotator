@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   EditableAgGridTable,
   RowData,
@@ -146,14 +153,16 @@ function TableEditor() {
   const [socketState, setSocketState] = useState<
     "connecting" | "connected" | "disconnected" | "error"
   >("connecting");
+  const socketRef = useRef<WebSocket | null>(null);
 
   const wsUrl =
     process.env.REACT_APP_TABLE_EDITOR_WS_URL ??
-    "ws://localhost:8080/table-editor";
+    "ws://localhost:8000/ws/table-editor";
 
   useEffect(() => {
     let isMounted = true;
     const socket = new WebSocket(wsUrl);
+    socketRef.current = socket;
 
     socket.onopen = () => {
       if (isMounted) {
@@ -162,6 +171,7 @@ function TableEditor() {
     };
 
     socket.onmessage = (event) => {
+      console.log("Received socket message:", event.data);
       try {
         const payload = JSON.parse(event.data) as unknown;
         const command = resolveSocketCommand(payload);
@@ -190,9 +200,28 @@ function TableEditor() {
 
     return () => {
       isMounted = false;
+      socketRef.current = null;
       socket.close();
     };
   }, [wsUrl]);
+
+  const sendTestMessage = useCallback(() => {
+    const socket = socketRef.current;
+
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      setSocketState("disconnected");
+      return;
+    }
+
+    socket.send(
+      JSON.stringify({
+        event: "table-editor-test",
+        target: "resolve",
+        message: "Hello from TableEditor button",
+        sentAt: new Date().toISOString(),
+      }),
+    );
+  }, []);
 
   const setLeftRows = useCallback(
     (updater: RowData[] | ((prev: RowData[]) => RowData[])) => {
@@ -225,6 +254,10 @@ function TableEditor() {
           Socket: {statusLabel}
         </div>
       </header>
+
+      <button onClick={sendTestMessage}>
+        test send message to davinci resolve
+      </button>
 
       <div className="table-editor-grid">
         <section className="table-editor-panel">
