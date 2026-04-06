@@ -1,11 +1,36 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App';
-import './index.css';
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import App from "./App";
+import AnotherPage from "./pages/AnotherPage";
+import AgGridTest from "./pages/ag_grid_test";
+import TableEditor from "./pages/TableEditor";
+import "./index.css";
 
-const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
+const root = ReactDOM.createRoot(
+  document.getElementById("root") as HTMLElement,
+);
 root.render(
   <React.StrictMode>
-    <App />
-  </React.StrictMode>
+    <BrowserRouter>
+      <Routes>
+        <Route
+          path="/"
+          element={<App />}
+        />
+        <Route
+          path="/another"
+          element={<AnotherPage />}
+        />
+        <Route
+          path="/ag-grid"
+          element={<AgGridTest />}
+        />
+        <Route
+          path="/table-editor"
+          element={<TableEditor />}
+        />
+      </Routes>
+    </BrowserRouter>
+  </React.StrictMode>,
 );

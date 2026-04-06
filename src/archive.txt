@@ -1,0 +1,96 @@
+  // function applySuggestionByIndex(view: EditorView, index: number) {
+  //   if (!filteredSuggestionOptions.length || index < 0) return true;
+  //   const normalizedIndex =
+  //     ((index % filteredSuggestionOptions.length) +
+  //       filteredSuggestionOptions.length) %
+  //     filteredSuggestionOptions.length;
+  //   const selectedSnippet = filteredSuggestionOptions[normalizedIndex];
+  //   insertSnippet(
+  //     view,
+  //     selectedSnippet,
+  //     snippetRowByName.get(selectedSnippet)?.casing ?? "none",
+  //   );
+  //   setIsSuggestionMenuOpen(false);
+  //   setSuggestionSearch("");
+  //   setActiveSuggestionIndex(-1);
+  //   view.focus();
+  //   return true;
+  // }
+  // function deleteSelectedRangeFromEditor() {
+  //   const view = mainEditorRef.current;
+  //   if (!view) return;
+
+  //   const selection = view.state.selection.main;
+  //   if (selection.empty) return;
+
+  //   const cursor = selection.from;
+  //   view.dispatch({
+  //     changes: { from: selection.from, to: selection.to, insert: "" },
+  //     selection: { anchor: cursor },
+  //   });
+  //   view.focus();
+  // }
+
+  // function handleSuggestionSearchKeyDown(
+  //   event: React.KeyboardEvent<HTMLInputElement>,
+  // ) {
+  //   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+  //     console.log("arrow key ");
+  //     if (event.shiftKey) {
+  //       console.log(
+  //         "shift + arrow key pressed, ignoring for suggestion navigation",
+  //       );
+  //       return;
+  //     }
+  //   }
+
+  //   if (event.key === "Escape") {
+  //     event.preventDefault();
+  //     setIsSuggestionMenuOpen(false);
+  //     setSuggestionSearch("");
+  //     mainEditorRef.current?.focus();
+  //     return;
+  //   }
+
+  //   if (event.key === "ArrowDown") {
+  //     event.preventDefault();
+  //     if (!filteredSuggestionOptions.length) return;
+  //     setActiveSuggestionIndex((prev) => {
+  //       if (prev < 0) return 0;
+  //       return Math.min(prev + 1, filteredSuggestionOptions.length - 1);
+  //     });
+  //     return;
+  //   }
+
+  //   if (event.key === "ArrowUp") {
+  //     event.preventDefault();
+  //     setActiveSuggestionIndex((prev) => {
+  //       if (prev <= 0) {
+  //         suggestionSearchInputRef.current?.focus();
+  //         return -1;
+  //       }
+  //       return prev - 1;
+  //     });
+  //     return;
+  //   }
+
+  //   if (event.key === "Enter") {
+  //     event.preventDefault();
+  //     if (!filteredSuggestionOptions.length) return;
+  //     const view = mainEditorRef.current;
+  //     if (!view) return;
+  //     const indexToApply =
+  //       activeSuggestionIndex < 0 ? 0 : activeSuggestionIndex;
+  //     applySuggestionByIndex(view, indexToApply);
+  //     return;
+  //   }
+
+  //   const shouldResetActiveSuggestionIndex =
+  //     event.key.length === 1 ||
+  //     event.key === "Backspace" ||
+  //     event.key === "Delete";
+
+  //   if (shouldResetActiveSuggestionIndex) {
+  //     setActiveSuggestionIndex(0);
+  //   }
+  // }

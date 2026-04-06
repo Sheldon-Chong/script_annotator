@@ -32,18 +32,26 @@ type SnippetTableProps = {
   snippetRows: Snippet[];
   snippetDropTargetIndex: number | null;
   onAddSnippetRow: () => void;
+  selectionModeEnabled?: boolean;
+  selectedRowIndices?: number[];
+  onToggleRowSelection?: (index: number) => void;
 } & Handlers;
 
 type SnippetTableRowProps = {
   row: Snippet;
   index: number;
   isDropTarget: boolean;
+  selectionModeEnabled?: boolean;
+  selected?: boolean;
+  onToggleRowSelection?: (index: number) => void;
 } & Handlers;
 
 function SnippetTableRow({
   row,
   index,
   isDropTarget,
+  selectionModeEnabled = false,
+  selected = false,
   onSnippetDragEnter,
   onSnippetDragOver,
   onSnippetDrop,
@@ -54,6 +62,7 @@ function SnippetTableRow({
   onOpenColorPicker,
   onDeleteSnippetRow,
   normalizeHexColor,
+  onToggleRowSelection,
 }: SnippetTableRowProps): React.ReactElement {
   return (
     <tr
@@ -64,6 +73,14 @@ function SnippetTableRow({
     >
       <td>
         <div className={styles.snippetInputRow}>
+          {selectionModeEnabled && (
+            <input
+              type="checkbox"
+              className={styles.snippetCheckbox}
+              checked={selected}
+              onChange={() => onToggleRowSelection?.(index)}
+            />
+          )}
           <button
             type="button"
             className={`${styles.snippetActionButton} ${styles.snippetDragHandle}`}
@@ -128,6 +145,9 @@ function SnippetTable({
   snippetRows,
   snippetDropTargetIndex,
   onAddSnippetRow,
+  selectionModeEnabled = false,
+  selectedRowIndices,
+  onToggleRowSelection,
   ...handlers
 }: SnippetTableProps): React.ReactElement {
   return (
@@ -147,6 +167,9 @@ function SnippetTable({
               row={row}
               index={index}
               isDropTarget={snippetDropTargetIndex === index}
+              selectionModeEnabled={selectionModeEnabled}
+              selected={selectedRowIndices?.includes(index) ?? false}
+              onToggleRowSelection={onToggleRowSelection}
               {...handlers}
             />
           ))}

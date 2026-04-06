@@ -30,7 +30,7 @@ import { useSnippetRows } from "./hooks/useSnippetRows";
 import styles from "./App.module.css";
 import defaults from "./config/defaults.json";
 import { type casing } from "./components/SnippetTable";
-import { normalizeHexColor } from "./utils/utils";
+import { normalizeHexColor, showBrowserNotification } from "./utils/utils";
 
 type RenderResponse = {
   rendered: number;
@@ -41,6 +41,46 @@ type RenderStatus = {
   tone: "idle" | "running" | "success" | "error";
   message: string;
 };
+
+async function renderRequest(script: string): Promise<RenderResponse> {
+  const candidates: string[] = [];
+  candidates.push("http://localhost:8000");
+  candidates.push("http://192.168.0.2:8000");
+
+  // Dedupe and normalize
+  const seen = new Set<string>();
+  const bases = candidates
+    .map((s) => (s || "").replace(/\/+$/, ""))
+    .filter((s) => {
+      if (!s) return false;
+      if (seen.has(s)) return false;
+      seen.add(s);
+      return true;
+    });
+
+  let lastError: Error | null = null;
+  for (const base of bases) {
+    const url = `${base}/textbox/render`;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ script }),
+      });
+      if (response.ok) return response.json() as Promise<RenderResponse>;
+      const text = await response.text();
+      lastError = new Error(
+        text || `Render failed with status ${response.status}`,
+      );
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+  throw lastError || new Error("Render failed: all URLs unreachable");
+}
 
 export const DEFAULT_SNIPPET_COLOR = "#9e9e9e";
 
@@ -78,41 +118,9 @@ function applySnippetToLine(
   );
 }
 
-// Extend the standard Input attributes
-interface CustomInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  children?: React.ReactNode;
-  onEmptyBackspace?: () => void; // Optional custom callback
-  ghostSuffix?: string;
-}
-
-// Runtime render API base comes from `public/config.json` (fetched at app start)
-// or from `REACT_APP_RENDER_API_BASE`. The actual request code lives inside
-// the `App` component so it can access the loaded base URL.
-
-async function showBrowserNotification(title: string, body: string) {
-  if (typeof window === "undefined" || !("Notification" in window)) {
-    return false;
-  }
-
-  if (Notification.permission === "granted") {
-    new Notification(title, { body });
-    return true;
-  }
-
-  if (Notification.permission !== "denied") {
-    const permission = await Notification.requestPermission();
-    if (permission === "granted") {
-      new Notification(title, { body });
-      return true;
-    }
-  }
-
-  return false;
-}
-
 function buildHighlightDecorations(
   view: EditorView,
-  highlightColorBySnippet: Map<string, string>,
+  snippets: Map<string, Snippet>,
   fallbackHighlightColor: string,
 ) {
   const builder = new RangeSetBuilder<Decoration>();
@@ -139,8 +147,9 @@ function buildHighlightDecorations(
     const separatorIndex = line.text.indexOf("::");
     if (separatorIndex > 0) {
       const snippet = line.text.slice(0, separatorIndex).trim();
-      const color =
-        highlightColorBySnippet.get(snippet) ?? fallbackHighlightColor;
+      const color = normalizeHexColor(
+        snippets.get(snippet)?.color ?? fallbackHighlightColor,
+      );
       builder.add(line.from, line.from + separatorIndex, getMark(color));
     }
   }
@@ -149,7 +158,7 @@ function buildHighlightDecorations(
 }
 
 function createHighlightBeforeDoubleColon(
-  highlightColorBySnippet: Map<string, string>,
+  snippets: Map<string, Snippet>,
   fallbackHighlightColor: string,
 ) {
   return ViewPlugin.fromClass(
@@ -159,7 +168,7 @@ function createHighlightBeforeDoubleColon(
       constructor(view: EditorView) {
         this.decorations = buildHighlightDecorations(
           view,
-          highlightColorBySnippet,
+          snippets,
           fallbackHighlightColor,
         );
       }
@@ -168,7 +177,7 @@ function createHighlightBeforeDoubleColon(
         if (update.docChanged || update.viewportChanged) {
           this.decorations = buildHighlightDecorations(
             update.view,
-            highlightColorBySnippet,
+            snippets,
             fallbackHighlightColor,
           );
         }
@@ -216,16 +225,15 @@ function App() {
   });
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const [suggestionSearch, setSuggestionSearch] = useState("");
+  const [selectionModeEnabled, setSelectionModeEnabled] = useState(false);
   const mainEditorRef = useRef<EditorView | null>(null);
+  const [selectedRowIndices, setSelectedRowIndices] = useState<number[]>([]);
   const mainEditorContainerRef = useRef<HTMLDivElement | null>(null);
   const suggestionSearchInputRef = useRef<HTMLInputElement | null>(null);
   const previousRangeSelectionRef = useRef(false);
   const previousMultiCursorRef = useRef(false);
   const lastTypedSpacePosRef = useRef<number | null>(null);
   const shouldDeleteLastTypedSpaceRef = useRef(false);
-
-  // Render API base loaded at runtime from /config.json (served from public/)
-  const [renderApiBase, setRenderApiBase] = useState<string | null>(null);
 
   const {
     activeColorPickerIndex,
@@ -242,31 +250,6 @@ function App() {
   });
 
   // Color picker UI moved to `ColorPicker` component in ./components/ColorPicker
-
-  useEffect(() => {
-    let mounted = true;
-    fetch("/config.json")
-      .then((r) => r.json())
-      .then((json) => {
-        if (!mounted) return;
-        if (json && typeof json.renderApiBase === "string") {
-          setRenderApiBase(json.renderApiBase);
-        } else {
-          setRenderApiBase(
-            process.env.REACT_APP_RENDER_API_BASE || "http://localhost:8000",
-          );
-        }
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setRenderApiBase(
-          process.env.REACT_APP_RENDER_API_BASE || "http://localhost:8000",
-        );
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   function focusSuggestionSearchInput() {
     requestAnimationFrame(() => {
@@ -352,20 +335,9 @@ function App() {
     return mapping;
   }, [snippetRows]);
 
-  const snippetHighlightColorByName = useMemo(() => {
-    const mapping = new Map<string, string>();
-    snippets.forEach((row, snippet) => {
-      mapping.set(snippet, normalizeHexColor(row.color));
-    });
-    return mapping;
-  }, [snippets]);
-
   const highlightBeforeDoubleColon = useMemo(() => {
-    return createHighlightBeforeDoubleColon(
-      snippetHighlightColorByName,
-      DEFAULT_SNIPPET_COLOR,
-    );
-  }, [snippetHighlightColorByName]);
+    return createHighlightBeforeDoubleColon(snippets, DEFAULT_SNIPPET_COLOR);
+  }, [snippets]);
 
   const filteredSuggestionOptions = useMemo(() => {
     const query = suggestionSearch.trim().toLowerCase();
@@ -377,21 +349,6 @@ function App() {
     );
   }, [suggestionOptions, suggestionSearch]);
 
-  const suggestionGhostSuffix = useMemo(() => {
-    console.log("calculating ghost suffix for query: ", suggestionSearch);
-    const query = suggestionSearch;
-    if (!query) return "";
-    const loweredQuery = query.toLowerCase();
-    const firstPrefixMatch = filteredSuggestionOptions.find((option) => {
-      const loweredOption = option.toLowerCase();
-      return (
-        loweredOption.startsWith(loweredQuery) && option.length > query.length
-      );
-    });
-    if (!firstPrefixMatch) return "";
-    return firstPrefixMatch.slice(query.length);
-  }, [suggestionSearch, filteredSuggestionOptions]);
-
   const isSuggestionMenuVisible =
     (hasRangeSelection || hasMultiCursor) &&
     isSuggestionMenuOpen &&
@@ -400,7 +357,7 @@ function App() {
 
   function applyCompletionSnippet(
     view: EditorView,
-    snippetRow: Snippet,
+    snippet: Snippet,
     from: number,
     to: number,
   ) {
@@ -432,7 +389,7 @@ function App() {
     });
     shouldDeleteLastTypedSpaceRef.current = false;
     lastTypedSpacePosRef.current = null;
-    insertSnippet(view, snippetRow);
+    insertSnippet(view, snippet);
   }
 
   function getSnippet(snippet: string): Snippet {
@@ -499,8 +456,8 @@ function App() {
     };
   }, [suggestionOptions, snippets]);
 
-  function insertSnippet(view: EditorView, snippetRow: Snippet) {
-    if (!snippetRow) return true;
+  function insertSnippet(view: EditorView, snippet: Snippet) {
+    if (!snippet) return true;
 
     const { state } = view;
     const ranges = state.selection.ranges;
@@ -537,11 +494,7 @@ function App() {
           return {
             from: line.from,
             to: line.to,
-            insert: applySnippetToLine(
-              line.text,
-              snippetRow.text,
-              snippetRow.casing,
-            ),
+            insert: applySnippetToLine(line.text, snippet.text, snippet.casing),
           };
         });
 
@@ -558,16 +511,16 @@ function App() {
       const line = state.doc.lineAt(selection.head);
       const newLine = applySnippetToLine(
         line.text,
-        snippetRow.text,
-        snippetRow.casing,
+        snippet.text,
+        snippet.casing,
       );
       const doubleColonIdx = line.text.indexOf("::");
       const cursorOffset =
         doubleColonIdx !== -1
-          ? snippetRow.text.length + 2
+          ? snippet.text.length + 2
           : line.text.length > 0
-            ? snippetRow.text.length + 3
-            : snippetRow.text.length + 2;
+            ? snippet.text.length + 3
+            : snippet.text.length + 2;
       const cursorAnchor = Math.min(
         line.from + cursorOffset,
         line.from + newLine.length,
@@ -586,15 +539,11 @@ function App() {
 
     for (let lineNumber = startLine; lineNumber <= endLine; lineNumber += 1) {
       const line = state.doc.line(lineNumber);
-      if (line.length === 0) continue;
+      if (line.text.trim().length === 0) continue;
       changes.push({
         from: line.from,
         to: line.to,
-        insert: applySnippetToLine(
-          line.text,
-          snippetRow.text,
-          snippetRow.casing,
-        ),
+        insert: applySnippetToLine(line.text, snippet.text, snippet.casing),
       });
     }
 
@@ -608,9 +557,40 @@ function App() {
   function applySuggestion(option: string) {
     const view = mainEditorRef.current;
     if (!view) return;
-    const snippetRow = getSnippet(option);
-    insertSnippet(view, snippetRow);
+    const snippet = getSnippet(option);
+    insertSnippet(view, snippet);
     view.focus();
+  }
+
+  /* TABLE ROW SELECTION LOGIC */
+
+  function toggleSelectionMode() {
+    setSelectionModeEnabled((isSelectionModeEnabled) => {
+      const next = !isSelectionModeEnabled;
+      if (!next) {
+        setSelectedRowIndices([]);
+      }
+      return next;
+    });
+  }
+
+  function toggleRowSelection(rowIndex: number) {
+    setSelectedRowIndices((prev) => {
+      if (prev.includes(rowIndex)) return prev.filter((i) => i !== rowIndex);
+      return [...prev, rowIndex];
+    });
+  }
+
+  function printSelectedRows() {
+    const selected = selectedRowIndices
+      .map((i) => snippetRows[i])
+      .filter(Boolean);
+    console.log("Selected rows:", selected);
+    alert(
+      selected.length
+        ? `Selected rows: ${selected.map((r) => r.text).join(", ")}`
+        : "No rows selected",
+    );
   }
 
   function updateSuggestionPosition(view: EditorView) {
@@ -684,49 +664,6 @@ function App() {
 
   function handleSuggestionMouseEnter(index: number) {
     setActiveSuggestionIndex(index);
-  }
-
-  async function renderRequest(script: string): Promise<RenderResponse> {
-    const candidates: string[] = [];
-    if (renderApiBase) candidates.push(renderApiBase);
-    if (process.env.REACT_APP_RENDER_API_BASE)
-      candidates.push(process.env.REACT_APP_RENDER_API_BASE);
-    candidates.push("http://localhost:8000");
-    candidates.push("http://192.168.0.2:8000");
-
-    // Dedupe and normalize
-    const seen = new Set<string>();
-    const bases = candidates
-      .map((s) => (s || "").replace(/\/+$/, ""))
-      .filter((s) => {
-        if (!s) return false;
-        if (seen.has(s)) return false;
-        seen.add(s);
-        return true;
-      });
-
-    let lastError: Error | null = null;
-    for (const base of bases) {
-      const url = `${base}/textbox/render`;
-      try {
-        const response = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({ script }),
-        });
-        if (response.ok) return response.json() as Promise<RenderResponse>;
-        const text = await response.text();
-        lastError = new Error(
-          text || `Render failed with status ${response.status}`,
-        );
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-      }
-    }
-    throw lastError || new Error("Render failed: all URLs unreachable");
   }
 
   async function renderScript(script: string) {
@@ -905,21 +842,9 @@ function App() {
       const digit = idx === 9 ? 0 : idx + 1;
       const run = (view: EditorView) => insertSnippet(view, snippetRows[idx]);
       return [
-        {
-          key: `Alt-${digit}`,
-          run,
-          preventDefault: true,
-        },
-        {
-          key: `Shift-Alt-${digit}`,
-          run,
-          preventDefault: true,
-        },
-        {
-          key: `Ctrl-Alt-${digit}`,
-          run,
-          preventDefault: true,
-        },
+        { key: `Alt-${digit}`, run, preventDefault: true },
+        { key: `Shift-Alt-${digit}`, run, preventDefault: true },
+        { key: `Ctrl-Alt-${digit}`, run, preventDefault: true },
       ];
     }).flat();
 
@@ -994,7 +919,6 @@ function App() {
       autocompleteExtension,
       EditorView.domEventHandlers({
         click: (event, view) => {
-          console.log("click");
           if (!event.altKey) return false;
           event.preventDefault();
           return openSuggestionsMenu(view);
@@ -1071,6 +995,22 @@ function App() {
       <h2>Script Annotator</h2>
       <div className={styles.columns}>
         <div className={styles.editor}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+            <button
+              type="button"
+              className={styles.commandButton}
+              onClick={toggleSelectionMode}
+            >
+              {selectionModeEnabled ? "Disable selection" : "Select Rows"}
+            </button>
+            <button
+              type="button"
+              className={styles.commandButton}
+              onClick={printSelectedRows}
+            >
+              Print Selected
+            </button>
+          </div>
           <SnippetTable
             snippetRows={snippetRows}
             snippetDropTargetIndex={snippetDropTargetIndex}
@@ -1085,6 +1025,9 @@ function App() {
             onDeleteSnippetRow={deleteSnippetRow}
             onAddSnippetRow={addSnippetRow}
             normalizeHexColor={normalizeHexColor}
+            selectionModeEnabled={selectionModeEnabled}
+            selectedRowIndices={selectedRowIndices}
+            onToggleRowSelection={toggleRowSelection}
           />
         </div>
         {Editor()}
@@ -1123,102 +1066,6 @@ function App() {
       )}
     </div>
   );
-  // function applySuggestionByIndex(view: EditorView, index: number) {
-  //   if (!filteredSuggestionOptions.length || index < 0) return true;
-  //   const normalizedIndex =
-  //     ((index % filteredSuggestionOptions.length) +
-  //       filteredSuggestionOptions.length) %
-  //     filteredSuggestionOptions.length;
-  //   const selectedSnippet = filteredSuggestionOptions[normalizedIndex];
-  //   insertSnippet(
-  //     view,
-  //     selectedSnippet,
-  //     snippetRowByName.get(selectedSnippet)?.casing ?? "none",
-  //   );
-  //   setIsSuggestionMenuOpen(false);
-  //   setSuggestionSearch("");
-  //   setActiveSuggestionIndex(-1);
-  //   view.focus();
-  //   return true;
-  // }
-  // function deleteSelectedRangeFromEditor() {
-  //   const view = mainEditorRef.current;
-  //   if (!view) return;
-
-  //   const selection = view.state.selection.main;
-  //   if (selection.empty) return;
-
-  //   const cursor = selection.from;
-  //   view.dispatch({
-  //     changes: { from: selection.from, to: selection.to, insert: "" },
-  //     selection: { anchor: cursor },
-  //   });
-  //   view.focus();
-  // }
-
-  // function handleSuggestionSearchKeyDown(
-  //   event: React.KeyboardEvent<HTMLInputElement>,
-  // ) {
-  //   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-  //     console.log("arrow key ");
-  //     if (event.shiftKey) {
-  //       console.log(
-  //         "shift + arrow key pressed, ignoring for suggestion navigation",
-  //       );
-  //       return;
-  //     }
-  //   }
-
-  //   if (event.key === "Escape") {
-  //     event.preventDefault();
-  //     setIsSuggestionMenuOpen(false);
-  //     setSuggestionSearch("");
-  //     mainEditorRef.current?.focus();
-  //     return;
-  //   }
-
-  //   if (event.key === "ArrowDown") {
-  //     event.preventDefault();
-  //     if (!filteredSuggestionOptions.length) return;
-  //     setActiveSuggestionIndex((prev) => {
-  //       if (prev < 0) return 0;
-  //       return Math.min(prev + 1, filteredSuggestionOptions.length - 1);
-  //     });
-  //     return;
-  //   }
-
-  //   if (event.key === "ArrowUp") {
-  //     event.preventDefault();
-  //     setActiveSuggestionIndex((prev) => {
-  //       if (prev <= 0) {
-  //         suggestionSearchInputRef.current?.focus();
-  //         return -1;
-  //       }
-  //       return prev - 1;
-  //     });
-  //     return;
-  //   }
-
-  //   if (event.key === "Enter") {
-  //     event.preventDefault();
-  //     if (!filteredSuggestionOptions.length) return;
-  //     const view = mainEditorRef.current;
-  //     if (!view) return;
-  //     const indexToApply =
-  //       activeSuggestionIndex < 0 ? 0 : activeSuggestionIndex;
-  //     applySuggestionByIndex(view, indexToApply);
-  //     return;
-  //   }
-
-  //   const shouldResetActiveSuggestionIndex =
-  //     event.key.length === 1 ||
-  //     event.key === "Backspace" ||
-  //     event.key === "Delete";
-
-  //   if (shouldResetActiveSuggestionIndex) {
-  //     setActiveSuggestionIndex(0);
-  //   }
-  // }
 }
 
 export default App;

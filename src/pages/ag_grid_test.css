@@ -1,0 +1,80 @@
+.ag-theme-quartz .ag-row {
+  transition: background-color 140ms ease;
+  font: 14px "Sans-serif", Tahoma, Geneva, Verdana, sans-serif;
+}
+.ag-theme-quartz .ag-row.ag-row-hover {
+  filter: brightness(0.97);
+}
+
+.ag-theme-quartz .ag-row-selected {
+  outline: 2px solid #2b6cb0;
+  outline-offset: -2px;
+}
+
+.ag-theme-quartz .ag-cell.editable-cell {
+  background: #f4f9ff;
+  cursor: text;
+}
+
+.ag-theme-quartz .ag-cell-inline-editing {
+  background: #fff7d6;
+  border: 1px solid #d69e2e;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(214, 158, 46, 0.25);
+}
+
+.ag-theme-quartz .ag-cell-inline-editing input {
+  color: #1a202c;
+  border-radius: 5px;
+}
+
+/* Prevent native checkbox from showing under AG Grid's themed checkbox */
+.ag-theme-quartz .ag-checkbox-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.grid-context-menu {
+  position: fixed;
+  z-index: 1200;
+  min-width: 190px;
+  border: 1px solid #d5dbe6;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 10px 26px rgba(16, 24, 40, 0.16);
+  padding: 6px;
+}
+
+.grid-context-menu__title {
+  font-size: 12px;
+  color: #5f6b7a;
+  padding: 6px 8px;
+  border-bottom: 1px solid #edf0f5;
+  margin-bottom: 4px;
+}
+
+.grid-context-menu__item {
+  inline-size: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: #17212f;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.grid-context-menu__item:hover {
+  background: #f2f6ff;
+}
+
+.grid-context-menu__item--danger {
+  color: #b42318;
+}
+
+.grid-context-menu__item--danger:hover {
+  background: #fff1f0;
+}
