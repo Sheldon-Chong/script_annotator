@@ -17,11 +17,29 @@
 }
 
 .table-editor-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 6px 10px;
   border-radius: 999px;
   font-size: 13px;
   font-weight: 600;
   border: 1px solid transparent;
+}
+
+.table-editor-status-spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: table-editor-spin 0.75s linear infinite;
+}
+
+@keyframes table-editor-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .table-editor-status--connecting {
@@ -45,7 +63,7 @@
 
 .table-editor-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -53,6 +71,34 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.table-editor-view-switcher {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.table-editor-view-button {
+  border: 1px solid #cfd8e3;
+  background: #f7f9fc;
+  color: #243447;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.table-editor-view-button:hover {
+  background: #eef4ff;
+  border-color: #9bb7e0;
+}
+
+.table-editor-view-button.is-active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
 }
 
 .table-editor-panel h2 {

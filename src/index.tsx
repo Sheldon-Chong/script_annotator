@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import App from "./App";
 import AnotherPage from "./pages/AnotherPage";
-import AgGridTest from "./pages/ag_grid_test";
+import AgGridThemeDebug from "./pages/AgGridThemeDebug";
 import TableEditor from "./pages/TableEditor";
 import "./index.css";
 
@@ -23,8 +23,8 @@ root.render(
           element={<AnotherPage />}
         />
         <Route
-          path="/ag-grid"
-          element={<AgGridTest />}
+          path="/ag-grid-theme-debug"
+          element={<AgGridThemeDebug />}
         />
         <Route
           path="/table-editor"
